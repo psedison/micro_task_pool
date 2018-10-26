@@ -51,7 +51,6 @@ func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, ta
 		microTask.Init(poolName, i, taskQueueLen, handle)
 		microTask.Start()
 		taskInfo.taskMap[i] = microTask
-
 	}
 
 	//go lib.WithRecover(this.accountCheckTask)
@@ -79,8 +78,8 @@ func (this *microTaskManager) PutQueue(poolName string, data interface{}, key st
 		if key != "" { //当传递了key则 根据key的hash值，来决定放入那个队列
 			keyIndex = tools.RSHash(key) % poolInfo.taskNum
 		} else { // 否则轮训
-			newNum := atomic.AddUint64(&this.putTaskNum, 1)  //将数量+1，得到新值
-			keyIndex = int(newNum % uint64(this.curTaskLen)) //取模获取 队列编号
+			newNum := atomic.AddUint64(&this.putTaskNum, 1)   //将数量+1，得到新值
+			keyIndex = int(newNum % uint64(poolInfo.taskNum)) //取模获取 队列编号
 		}
 
 		task := poolInfo.taskMap[keyIndex]
