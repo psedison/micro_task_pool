@@ -2,6 +2,7 @@ package micro_task_pool
 
 import (
 	"errors"
+	"sync/atomic"
 
 	logs "github.com/cihub/seelog"
 	"github.com/psedison/tools"
@@ -12,6 +13,7 @@ var MicroTaskManager = &microTaskManager{}
 type microTaskManager struct {
 	bTaskExit  bool                      //队列退出
 	curTaskLen int                       //当前队列长度
+	putTaskNum uint64                    //当前推入了队列的数量，用于均衡的向队列中放入数据
 	allTaskMap map[string]*microTaskInfo //维护的所有go程队列 poolName=>microTaskInfo
 }
 
@@ -43,7 +45,6 @@ func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, ta
 	taskInfo.poolName = poolName
 
 	for i := 0; i < pollTaskNum; i++ {
-		//jouranl结余计算
 		logs.Infof("micro task manager start, pool name:%s, task num:%d, task queue len:%d, init task, task no:%d", poolName, pollTaskNum, taskQueueLen, i)
 		microTask := &MicroTask{}
 
@@ -74,7 +75,14 @@ func (this *microTaskManager) getPoolTaskInfo(poolName string) *microTaskInfo {
 func (this *microTaskManager) PutQueue(poolName string, data interface{}, key string) error {
 
 	if poolInfo, ok := this.allTaskMap[poolName]; ok {
-		keyIndex := tools.RSHash(key) % poolInfo.taskNum
+		keyIndex := 0
+		if key != "" { //当传递了key则 根据key的hash值，来决定放入那个队列
+			keyIndex = tools.RSHash(key) % poolInfo.taskNum
+		} else { // 否则轮训
+			newNum := atomic.AddUint64(&this.putTaskNum, 1)  //将数量+1，得到新值
+			keyIndex = int(newNum % uint64(this.curTaskLen)) //取模获取 队列编号
+		}
+
 		task := poolInfo.taskMap[keyIndex]
 		err := task.PutQueue(data)
 		if err != nil {
