@@ -147,5 +147,5 @@ func (this *microTaskInfo) getIdleTask() MicroTaskInterface {
 		this.taskList.MoveToBack(this.taskList.Front()) //第一个元素移入末尾
 	}
 
-	return nil
+	return leastQueueTask.Value.(MicroTaskInterface)
 }
