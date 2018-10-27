@@ -14,6 +14,8 @@ type MicroTaskInterface interface {
 	UnInit() error
 	Start() error
 	PutQueue(data interface{}) error
+	GetQueueLen() int32
+	GetTaskNo() int
 }
 
 type ProcessHandle interface {
@@ -56,6 +58,16 @@ func (this *MicroTask) Start() error {
 	return nil
 }
 
+//GetTaskNo 获取队列编号
+func (this *MicroTask) GetTaskNo() int {
+	return this.taskNo
+}
+
+//GetQueueLen 获取队列长度
+func (this *MicroTask) GetQueueLen() int32 {
+	return this.curQueueLen
+}
+
 func (this *MicroTask) PutQueue(data interface{}) error {
 	after := time.NewTimer(time.Second * 2)
 	defer after.Stop()
@@ -78,6 +90,7 @@ func (this *MicroTask) runTask() {
 		select {
 		case data := <-this.transferQueue:
 			this.ProcessData(data)
+			atomic.AddInt32(&this.curQueueLen, -1) //将队列长度-1
 		case <-t.C:
 			logs.Infof("micro task check is running, task name:%s, task no:%d", this.taskName, this.taskNo)
 			t.Reset(time.Second * time.Duration(60))
