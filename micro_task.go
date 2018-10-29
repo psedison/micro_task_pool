@@ -92,7 +92,7 @@ func (this *MicroTask) runTask() {
 			this.ProcessData(data)
 			atomic.AddInt32(&this.curQueueLen, -1) //将队列长度-1
 		case <-t.C:
-			logs.Infof("micro task check is running, task name:%s, task no:%d", this.taskName, this.taskNo)
+			logs.Debugf("micro task check is running, task name:%s, task no:%d", this.taskName, this.taskNo)
 			t.Reset(time.Second * time.Duration(60))
 		}
 	}
