@@ -99,6 +99,7 @@ func (this *MicroTask) ProcessData(data interface{}) error {
 		return nil
 	}
 
+	logs.Debugf("micro task, process data begin, task name:%s, task no:%d", this.taskName, this.taskNo)
 	this.handle.ProcessData(data)
 	return nil
 }
