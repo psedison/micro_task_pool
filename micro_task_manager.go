@@ -33,6 +33,7 @@ type microTaskInfo struct {
 func (this *microTaskManager) Init() error {
 	logs.Info("balance manager init")
 	this.allTaskMap = make(map[string]*microTaskInfo)
+	this.useShareQueue = true //默认使用共享队列
 	return nil
 }
 
