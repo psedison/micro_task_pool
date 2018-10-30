@@ -13,9 +13,10 @@ import (
 var MicroTaskManager = &microTaskManager{}
 
 type microTaskManager struct {
-	bTaskExit  bool                      //队列退出
-	curTaskLen int                       //当前队列长度
-	allTaskMap map[string]*microTaskInfo //维护的所有go程队列 poolName=>microTaskInfo
+	bTaskExit     bool                      //队列退出
+	curTaskLen    int                       //当前队列长度
+	allTaskMap    map[string]*microTaskInfo //维护的所有go程队列 poolName=>microTaskInfo
+	useShareQueue bool                      //是否所有task使用同一个队列， 默认使用同一个
 }
 
 type microTaskInfo struct {
@@ -23,7 +24,8 @@ type microTaskInfo struct {
 	poolName      string
 	taskQueueLen  int
 	taskMap       map[int]MicroTaskInterface
-	taskList      *list.List //用list保存 所有task，每次获取task 后都将改task放入队列末尾，下次取队列头的task，最大限度保证数据公平被task消费
+	shareQueue    *MicroQueue //是否所有task使用同一个队列， 默认使用同一个
+	taskList      *list.List  //用list保存 所有task，每次获取task 后都将改task放入队列末尾，下次取队列头的task，最大限度保证数据公平被task消费
 	taskListMutex sync.Mutex
 }
 
@@ -39,6 +41,11 @@ func (this *microTaskManager) UnInit() error {
 	return nil
 }
 
+func (this *microTaskManager) setUseShareQueue(useShareQueue bool) error {
+	this.useShareQueue = useShareQueue
+	return nil
+}
+
 //StartTaskPool 启动处理go程池, poolName:任务名称， pollTaskNum:任务数量, taskQueueLen:单个go程内的队列数量
 func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, taskQueueLen int32, handle ProcessHandle) error {
 	logs.Infof("micro task manager start, pool name:%s, task num:%s, task queue len:%d", poolName, pollTaskNum, taskQueueLen)
@@ -51,7 +58,14 @@ func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, ta
 		logs.Infof("micro task manager start, pool name:%s, task num:%d, task queue len:%d, init task, task no:%d", poolName, pollTaskNum, taskQueueLen, i)
 		microTask := &MicroTask{}
 
-		microTask.Init(poolName, i, taskQueueLen, handle)
+		if this.useShareQueue {
+			taskInfo.shareQueue = &MicroQueue{}
+			taskInfo.shareQueue.Init(taskQueueLen)
+			microTask.Init(poolName, i, taskQueueLen, handle, taskInfo.shareQueue)
+		} else {
+			microTask.Init(poolName, i, taskQueueLen, handle, nil)
+		}
+
 		microTask.Start()
 		taskInfo.taskMap[i] = microTask
 		taskInfo.taskList.PushBack(microTask) //将task放入 list
@@ -79,18 +93,31 @@ func (this *microTaskManager) getPoolTaskInfo(poolName string) *microTaskInfo {
 func (this *microTaskManager) PutQueue(poolName string, data interface{}, key string) error {
 
 	if poolInfo, ok := this.allTaskMap[poolName]; ok {
-		task := poolInfo.getTask(key)
-		if task == nil {
-			logs.Warnf("micro task manager, put queue failed, pool name:%s, key:%s, error: get task is null", poolName, key)
-			return errors.New("get task failed")
-		}
+		if this.useShareQueue {
 
-		err := task.PutQueue(data)
-		if err != nil {
-			logs.Warnf("micro task manager, put queue failed, pool name:%s, task no:%d, error:%s", poolInfo.poolName, task.GetTaskNo(), err.Error())
-			return err
+			err := poolInfo.shareQueue.PutQueue(data, 2)
+			if err != nil {
+				logs.Warnf("micro task manager, put queue failed, pool name:%s, queue len:%d, data:%v", poolName, poolInfo.shareQueue.GetQueueLen(), data)
+				return errors.New("put failed, timeout")
+			}
+
+			logs.Debugf("micro task manager, put queue success, pool name:%s, queue len:%d", poolName, poolInfo.shareQueue.GetQueueLen())
+			return nil
+		} else {
+			task := poolInfo.getTask(key)
+			if task == nil {
+				logs.Warnf("micro task manager, put queue failed, pool name:%s, key:%s, error: get task is null", poolName, key)
+				return errors.New("get task failed")
+			}
+
+			err := task.PutQueue(data)
+			if err != nil {
+				logs.Warnf("micro task manager, put queue failed, pool name:%s, task no:%d, error:%s", poolInfo.poolName, task.GetTaskNo(), err.Error())
+				return err
+			}
+
+			logs.Debugf("micro task manager, put queue success, pool name:%s, task no:%d, task queue len:%d", poolInfo.poolName, task.GetTaskNo(), task.GetQueueLen())
 		}
-		logs.Debugf("micro task manager, put queue success, pool name:%s, task no:%d, task queue len:%d", poolInfo.poolName, task.GetTaskNo(), task.GetQueueLen())
 	} else {
 		logs.Warnf("micro task manager, put queue failed, pool name:%s, error:pool name not exist", poolName)
 		return errors.New("pool name not exist")
