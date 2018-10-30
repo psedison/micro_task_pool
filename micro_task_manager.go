@@ -54,14 +54,14 @@ func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, ta
 	taskInfo := this.getPoolTaskInfo(poolName)
 	taskInfo.taskNum = pollTaskNum
 	taskInfo.poolName = poolName
+	taskInfo.shareQueue = &MicroQueue{}
+	taskInfo.shareQueue.Init(taskQueueLen)
 
 	for i := 0; i < pollTaskNum; i++ {
 		logs.Infof("micro task manager start, pool name:%s, task num:%d, task queue len:%d, init task, task no:%d", poolName, pollTaskNum, taskQueueLen, i)
 		microTask := &MicroTask{}
 
 		if this.useShareQueue {
-			taskInfo.shareQueue = &MicroQueue{}
-			taskInfo.shareQueue.Init(taskQueueLen)
 			microTask.Init(poolName, i, taskQueueLen, handle, taskInfo.shareQueue)
 		} else {
 			microTask.Init(poolName, i, taskQueueLen, handle, nil)
