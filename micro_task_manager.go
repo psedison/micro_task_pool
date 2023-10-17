@@ -17,6 +17,7 @@ type microTaskManager struct {
 	curTaskLen    int                       //当前队列长度
 	allTaskMap    map[string]*microTaskInfo //维护的所有go程队列 poolName=>microTaskInfo
 	useShareQueue bool                      //是否所有task使用同一个队列， 默认使用同一个
+	queueTimeout  int32                     //数据放入队列的超时时间
 }
 
 type microTaskInfo struct {
@@ -34,6 +35,17 @@ func (this *microTaskManager) Init() error {
 	logs.Info("balance manager init")
 	this.allTaskMap = make(map[string]*microTaskInfo)
 	this.useShareQueue = true //默认使用共享队列
+	this.queueTimeout = 2     //默认超时时间2秒
+	return nil
+}
+
+func (this *microTaskManager) SetUseShareQueue(share_queue bool) error {
+	this.useShareQueue = share_queue
+	return nil
+}
+
+func (this *microTaskManager) SetQueueTimeOut(timeout int32) error {
+	this.queueTimeout = timeout
 	return nil
 }
 
@@ -67,6 +79,7 @@ func (this *microTaskManager) StartTaskPool(poolName string, pollTaskNum int, ta
 			microTask.Init(poolName, i, taskQueueLen, handle, nil)
 		}
 
+		microTask.SetQueueTimeOut(this.queueTimeout)
 		microTask.Start()
 		taskInfo.taskMap[i] = microTask
 		taskInfo.taskList.PushBack(microTask) //将task放入 list
@@ -96,7 +109,7 @@ func (this *microTaskManager) PutQueue(poolName string, data interface{}, key st
 	if poolInfo, ok := this.allTaskMap[poolName]; ok {
 		if this.useShareQueue {
 
-			err := poolInfo.shareQueue.PutQueue(data, 2)
+			err := poolInfo.shareQueue.PutQueue(data, this.queueTimeout)
 			if err != nil {
 				logs.Warnf("micro task manager, put queue failed, pool name:%s, queue len:%d, data:%v", poolName, poolInfo.shareQueue.GetQueueLen(), data)
 				return errors.New("put failed, timeout")

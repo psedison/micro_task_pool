@@ -26,6 +26,7 @@ type MicroTask struct {
 	taskName      string        //
 	taskNo        int           //go程的编号
 	handle        ProcessHandle //处理数据的Handel
+	queueTimeout  int32         //数据放入队列的超时时间
 	useShareQueue bool
 }
 
@@ -57,6 +58,11 @@ func (this *MicroTask) UnInit() error {
 	return nil
 }
 
+func (this *MicroTask) SetQueueTimeOut(timeout int32) error {
+	this.queueTimeout = timeout
+	return nil
+}
+
 //启动处理转账的go程
 func (this *MicroTask) Start() error {
 	logs.Infof("micro task start, task no:%d, queue len:%d", this.taskNo, this.queueMaxLen)
@@ -77,7 +83,7 @@ func (this *MicroTask) GetQueueLen() int32 {
 }
 
 func (this *MicroTask) PutQueue(data interface{}) error {
-	return this.transferQueue.PutQueue(data, 2)
+	return this.transferQueue.PutQueue(data, this.queueTimeout)
 }
 
 func (this *MicroTask) runTask() {
